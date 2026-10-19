@@ -1,6 +1,6 @@
 # ShelfSense AI 🛒
 
-## LIVE DEMO : 
+# LIVE DEMO : 
 https://shelfsense-ai-09.streamlit.app/
 
 
