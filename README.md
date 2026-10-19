@@ -3,6 +3,7 @@
 ## LIVE DEMO : 
 https://shelfsense-ai-09.streamlit.app/
 
+
 **ShelfSense AI** is a smart retail application designed to make supermarket shopping easier through product search, aisle and shelf navigation, cart management, and bill generation.
 
 ## ✨ Features
