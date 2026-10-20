@@ -1,0 +1,12 @@
+
+product_id,product_name,brand,category,price,aisle,shelf,image
+P001,Lays Classic Salted,Lays,Chips & Snacks,20,1,A1,product_images/lays.jpg
+P002,Kurkure Masala Munch,Kurkure,Chips & Snacks,20,1,A2,product_images/kurkure.jpg
+P003,Parle-G Biscuits,Parle, Biscuits,10,2,B1,product_images/parleg.jpg
+P004,Oreo Original,Oreo,Biscuits,30,2,B2,product_images/oreo.jpg
+P005,Dairy Milk Silk,Cadbury,Chocolates,80,3,C1,product_images/dairymilk.jpg
+P006,Maggi Noodles,Maggi,Instant Noodles,14,4,D1,product_images/maggi.jpg
+P007,Nescafe Classic,Nescafe,Coffee,120,5,E1,product_images/nescafe.jpg
+P008,Tata Tea Gold,Tata Tea,Tea,150,5,E2,product_images/tata_tea.jpg
+P009,Amul Butter,Amul,Dairy,60,6,F1,product_images/amul_butter.jpg
+P010,Kissan Tomato Ketchup,Kissan,Sauces,110,7,G1,product_images/kissan.jpg

@@ -1,4 +1,4 @@
-
+import os
 import streamlit as st
 import pandas as pd
 from datetime import datetime
@@ -36,28 +36,35 @@ CATALOGUE = {
 }
 
 BASE_PRICES = {
-    "Biscuits & Cookies": 10, "Chips & Snacks": 10,
-    "Instant Noodles": 14, "Chocolates & Candy": 5,
-    "Dairy & Milk": 25, "Bread & Bakery": 20,
-    "Breakfast & Cereals": 45, "Tea & Coffee": 60,
-    "Soft Drinks & Juices": 20, "Rice & Grains": 55,
-    "Atta & Flours": 35, "Pulses & Lentils": 50,
-    "Cooking Oils": 90, "Spices & Masalas": 25,
-    "Sauces & Spreads": 35, "Personal Care": 30,
-    "Home Cleaning": 35, "Paper & Stationery": 10,
-    "Frozen Foods": 60, "Pet Supplies": 40,
+    "Biscuits & Cookies": 10, "Chips & Snacks": 10, "Instant Noodles": 14, "Chocolates & Candy": 5,
+    "Dairy & Milk": 25, "Bread & Bakery": 20, "Breakfast & Cereals": 45, "Tea & Coffee": 60,
+    "Soft Drinks & Juices": 20, "Rice & Grains": 55, "Atta & Flours": 35, "Pulses & Lentils": 50,
+    "Cooking Oils": 90, "Spices & Masalas": 25, "Sauces & Spreads": 35, "Personal Care": 30,
+    "Home Cleaning": 35, "Paper & Stationery": 10, "Frozen Foods": 60, "Pet Supplies": 40,
+}
+ICONS = ["🍪", "🥔", "🍜", "🍫", "🥛", "🍞", "🥣", "☕", "🥤", "🍚", "🌾", "🫘", "🫒", "🧂", "🥫", "🧴", "🧹", "📒", "🧊", "🐾"]
+
+# Local product photos for the original catalogue. Keep the product_images
+# folder beside app.py when copying the project to another computer.
+APP_DIR = os.path.dirname(os.path.abspath(__file__))
+PRODUCT_IMAGE_DIR = os.path.join(APP_DIR, "product_images")
+CATEGORY_IMAGE_FILES = {
+    "Biscuits & Cookies": ["biscuits_parle_g.jpg", "biscuits_good_day.jpg", "biscuits_oreo.jpg", "biscuits_bourbon.jpg"],
+    "Chocolates & Candy": ["chocolate_kitkat.jpg", "chocolate_dairy_milk.jpg"],
+    "Bread & Bakery": ["bread_white.jpg", "bread_brown.jpg"],
 }
 
-ICONS = [
-    "🍪", "🥔", "🍜", "🍫", "🥛", "🍞", "🥣", "☕", "🥤", "🍚",
-    "🌾", "🫘", "🫒", "🧂", "🥫", "🧴", "🧹", "📒", "🧊", "🐾"
-]
-
 rows = []
-for aisle_no, (category, items) in enumerate(CATALOGUE.items(), start=1):
-    for product_no, product in enumerate(items, start=1):
+for aisle_no, (category, products) in enumerate(CATALOGUE.items(), start=1):
+    for product_no, product in enumerate(products, start=1):
         shelf_letter = "A" if product_no <= 5 else "B"
         shelf_level = ((product_no - 1) % 5) + 1
+        image_choices = CATEGORY_IMAGE_FILES.get(category, [])
+        image_path = ""
+        if image_choices:
+            candidate = os.path.join(PRODUCT_IMAGE_DIR, image_choices[(product_no - 1) % len(image_choices)])
+            if os.path.isfile(candidate):
+                image_path = candidate
         rows.append({
             "id": f"{aisle_no:02d}-{product_no:02d}",
             "product": product,
@@ -66,17 +73,110 @@ for aisle_no, (category, items) in enumerate(CATALOGUE.items(), start=1):
             "aisle": aisle_no,
             "shelf": f"{shelf_letter}{shelf_level}",
             "icon": ICONS[aisle_no - 1],
+            "image_path": image_path,
         })
-
 products_df = pd.DataFrame(rows)
+products_df["description"] = ""
+products_df["image_path"] = ""
 
-# ---------- Session state ----------
+# ---------- Optional retail image dataset ----------
+# Keep the original 200 demo products and add products from train.csv.
+# Update DATASET_DIR if your dataset folder is stored somewhere else.
+DATASET_DIR = r"E:\ShelfSense_AI\Product_Images\retail-products-classification"
+
+@st.cache_data(show_spinner="Loading retail product dataset...")
+def load_dataset_products(dataset_dir):
+    csv_path = os.path.join(dataset_dir, "train.csv")
+    if not os.path.isfile(csv_path):
+        return pd.DataFrame(columns=[
+            "id", "product", "category", "price", "aisle", "shelf",
+            "icon", "description", "image_path"
+        ])
+
+    try:
+        df = pd.read_csv(csv_path, dtype={"ImgId": str})
+    except Exception:
+        return pd.DataFrame(columns=[
+            "id", "product", "category", "price", "aisle", "shelf",
+            "icon", "description", "image_path"
+        ])
+
+    required = {"ImgId", "title", "categories"}
+    if not required.issubset(df.columns):
+        return pd.DataFrame(columns=[
+            "id", "product", "category", "price", "aisle", "shelf",
+            "icon", "description", "image_path"
+        ])
+
+    df = df.dropna(subset=["ImgId", "title", "categories"]).copy()
+    df = df.drop_duplicates(subset=["ImgId"])
+    df["id"] = "DS-" + df["ImgId"].astype(str)
+    df["product"] = df["title"].astype(str).str.strip()
+    df["category"] = df["categories"].astype(str).str.strip()
+    if "description" not in df.columns:
+        df["description"] = ""
+    df["description"] = df["description"].fillna("").astype(str)
+
+    # Prices and shelf locations are demo values, not values from the dataset.
+    df = df.reset_index(drop=True)
+    df["price"] = 25 + (df.index % 36) * 5
+    category_codes = pd.factorize(df["category"])[0]
+    df["aisle"] = category_codes + len(CATALOGUE) + 1
+    df["shelf"] = [
+        f"{'A' if i % 10 < 5 else 'B'}{i % 5 + 1}"
+        for i in range(len(df))
+    ]
+    df["icon"] = "🛍️"
+    df["image_path"] = df["ImgId"].map(
+        lambda image_id: os.path.join(
+            dataset_dir, "train", "train", f"{image_id}.jpg"
+        )
+    )
+    return df[[
+        "id", "product", "category", "price", "aisle", "shelf",
+        "icon", "description", "image_path"
+    ]]
+
+
+dataset_products = load_dataset_products(DATASET_DIR)
+products_df = pd.concat([products_df, dataset_products], ignore_index=True)
+
+# Exclude the four requested products from the entire combined catalogue,
+# including products loaded from train.csv. Partial, case-insensitive matches
+# handle differences in punctuation and extra product-description text.
+_remove_title_patterns = [
+    "cleavage control clip",
+    "viva la juicy la fleur",
+    "sex in the city sexual instinct",
+    "deluxe ball gag with dong",
+]
+_normalized_titles = products_df["product"].fillna("").astype(str).str.casefold()
+_remove_mask = _normalized_titles.apply(
+    lambda title: any(pattern in title for pattern in _remove_title_patterns)
+)
+products_df = products_df.loc[~_remove_mask].copy().reset_index(drop=True)
+
+# Keep the requested original catalogue size explicit and verifiable.
+
+assert len(CATALOGUE) == 20, "Catalogue must contain exactly 20 categories."
+assert all(len(items) >= 10 for items in CATALOGUE.values()), "Each category must contain at least 10 products."
+assert len(products_df) >= 200, "Catalogue must contain at least 200 products."
+
+# ---------- State ----------
 if "cart" not in st.session_state:
     st.session_state.cart = {}
 if "receipt" not in st.session_state:
     st.session_state.receipt = None
 if "screen" not in st.session_state:
     st.session_state.screen = "Find a product"
+
+# Drop stale cart entries if a product has been removed from the catalogue.
+_valid_product_ids = set(products_df["id"].astype(str))
+st.session_state.cart = {
+    product_id: quantity
+    for product_id, quantity in st.session_state.cart.items()
+    if str(product_id) in _valid_product_ids
+}
 
 # ---------- Styling ----------
 st.markdown("""
@@ -115,10 +215,37 @@ hr { border-color:#e0eae5; }
 </style>
 """, unsafe_allow_html=True)
 
+def blast_effect():
+    """Show a short animated comic-style blast instead of Streamlit balloons."""
+    st.markdown("""
+    <style>
+    @keyframes blast-pop {
+      0% { transform: scale(.15) rotate(-20deg); opacity: 0; }
+      55% { transform: scale(1.2) rotate(8deg); opacity: 1; }
+      75% { transform: scale(.95) rotate(-4deg); opacity: 1; }
+      100% { transform: scale(1) rotate(0); opacity: 1; }
+    }
+    @keyframes blast-rays {
+      0% { transform: scale(.2) rotate(0deg); opacity: 0; }
+      55% { transform: scale(1.15) rotate(18deg); opacity: 1; }
+      100% { transform: scale(1) rotate(0deg); opacity: .9; }
+    }
+    .blast-wrap { text-align:center; padding:8px 0 14px; animation:blast-pop .65s ease-out both; }
+    .blast-rays { font-size:34px; letter-spacing:8px; line-height:1; animation:blast-rays .7s ease-out both; }
+    .blast-main { font-size:64px; line-height:1.15; filter:drop-shadow(0 5px 2px #e5b85d); }
+    .blast-label { color:#b45309; font-weight:900; font-size:17px; letter-spacing:4px; }
+    @media (prefers-reduced-motion: reduce) { .blast-wrap, .blast-rays { animation:none; } }
+    </style>
+    <div class="blast-wrap">
+      <div class="blast-rays">✦ ✧ ✦</div>
+      <div class="blast-main">💥</div>
+      <div class="blast-label">BLAST! CHECKOUT COMPLETE</div>
+    </div>
+    """, unsafe_allow_html=True)
+
 
 def money(value):
     return f"₹{value:,.2f}"
-
 
 def location_markup(row):
     return f"""<div class="location-hero">
@@ -127,62 +254,43 @@ def location_markup(row):
       <div style="color:#785c1e;font-size:13px;margin-top:5px;">{escape(str(row['category']))} section</div>
     </div>"""
 
-
 def rerun():
     if hasattr(st, "rerun"):
         st.rerun()
     else:
         st.experimental_rerun()
 
-
 def add_to_cart(product_id):
     st.session_state.cart[product_id] = st.session_state.cart.get(product_id, 0) + 1
     st.session_state.receipt = None
 
-
 def cart_count():
     return sum(st.session_state.cart.values())
 
-
 def cart_total():
     lookup = products_df.set_index("id")
-    return sum(
-        float(lookup.loc[pid, "price"]) * qty
-        for pid, qty in st.session_state.cart.items()
-        if pid in lookup.index
-    )
-
+    return sum(float(lookup.loc[pid, "price"]) * qty for pid, qty in st.session_state.cart.items() if pid in lookup.index)
 
 # ---------- Sidebar navigation ----------
 with st.sidebar:
     st.markdown('<div class="eyebrow">SMART BAZAAR</div>', unsafe_allow_html=True)
     st.markdown("## ShelfSense AI")
-    st.caption("Search it. Find it. Shop faster.")
+    st.caption("Search products · Locate shelves · Checkout")
     st.markdown("---")
-
-    screens = ["Find a product", "My cart & locations", "Final bill"]
     screen = st.radio(
         "YOUR SHOPPING",
-        screens,
-        index=screens.index(st.session_state.screen),
+        ["Find a product", "My cart & locations", "Final bill"],
+        index=["Find a product", "My cart & locations", "Final bill"].index(st.session_state.screen),
         key="screen_navigation",
+        label_visibility="visible",
     )
     st.session_state.screen = screen
-
     st.markdown("---")
-    st.markdown(
-        f'<div class="metric-box"><div class="metric-label">ITEMS IN CART</div>'
-        f'<div class="metric-value">{cart_count()}</div></div>',
-        unsafe_allow_html=True,
-    )
+    st.markdown(f'<div class="metric-box"><div class="metric-label">ITEMS IN CART</div><div class="metric-value">{cart_count()}</div></div>', unsafe_allow_html=True)
     st.write("")
-    st.markdown(
-        f'<div class="metric-box"><div class="metric-label">CURRENT TOTAL</div>'
-        f'<div class="metric-value">{money(cart_total())}</div></div>',
-        unsafe_allow_html=True,
-    )
+    st.markdown(f'<div class="metric-box"><div class="metric-label">CURRENT TOTAL</div><div class="metric-value">{money(cart_total())}</div></div>', unsafe_allow_html=True)
     st.write("")
-    st.caption("Demo shelf map: aisle numbers and shelf codes are sample store locations.")
+    st.caption("Aisle and shelf codes are sample locations for this demo store.")
 
 st.markdown("""
 <div class="brand">
@@ -192,80 +300,69 @@ st.markdown("""
 </div>
 """, unsafe_allow_html=True)
 
-# ---------- Screen 1: Product search ----------
+# ---------- Screen 1: Search / browse ----------
 if screen == "Find a product":
-    st.markdown(
-        '<div class="section-title">Find a product</div>'
-        '<div class="muted">200 products · 20 categories · clear shelf directions</div>',
-        unsafe_allow_html=True,
-    )
+    st.markdown('<div class="section-title">Find a product</div><div class="muted">200+ products · searchable categories · clear shelf directions</div>', unsafe_allow_html=True)
     st.write("")
-
     search_col, cat_col = st.columns([2.2, 1])
     with search_col:
-        query = st.text_input(
-            "Search products",
-            placeholder="Try Maggi, Oreo, shampoo, rice...",
-            label_visibility="collapsed",
-        )
+        query = st.text_input("Search products", placeholder="Try Maggi, Oreo, shampoo, rice...", label_visibility="collapsed")
     with cat_col:
         selected_category = st.selectbox(
             "Category",
-            ["All categories"] + list(CATALOGUE.keys()),
+            ["All categories"] + sorted(products_df["category"].dropna().unique().tolist()),
             label_visibility="collapsed",
         )
-
     filter_col, sort_col = st.columns([1, 1])
     with filter_col:
-        max_price = st.slider(
-            "Maximum price", min_value=10, max_value=200,
-            value=200, step=5,
-        )
+        max_price = st.slider("Maximum price", min_value=10, max_value=200, value=200, step=5)
     with sort_col:
-        sort_by = st.selectbox(
-            "Sort products",
-            ["Recommended", "Price: low to high", "Price: high to low", "Aisle number"],
-        )
-
+        sort_by = st.selectbox("Sort products", ["Recommended", "Price: low to high", "Price: high to low", "Aisle number"])
     shown = products_df.copy()
     if query.strip():
+        search_text = query.strip()
         mask = (
-            shown["product"].str.contains(query.strip(), case=False, na=False)
-            | shown["category"].str.contains(query.strip(), case=False, na=False)
+            shown["product"].str.contains(
+                search_text, case=False, na=False, regex=False
+            )
+            | shown["category"].str.contains(
+                search_text, case=False, na=False, regex=False
+            )
+            | shown["description"].str.contains(
+                search_text, case=False, na=False, regex=False
+            )
         )
         shown = shown[mask]
-
     if selected_category != "All categories":
         shown = shown[shown["category"] == selected_category]
-
     shown = shown[shown["price"] <= max_price]
-
     if sort_by == "Price: low to high":
         shown = shown.sort_values("price")
     elif sort_by == "Price: high to low":
         shown = shown.sort_values("price", ascending=False)
     elif sort_by == "Aisle number":
         shown = shown.sort_values(["aisle", "shelf"])
-
     st.write("")
-    st.markdown(
-        f'<span class="step-pill">{len(shown)} MATCHING PRODUCTS</span>',
-        unsafe_allow_html=True,
-    )
-
+    st.markdown(f'<span class="step-pill">{len(shown)} MATCHING PRODUCTS</span>', unsafe_allow_html=True)
     if query.strip() and not shown.empty:
         first = shown.iloc[0]
         st.markdown("### Best match — location highlighted")
         st.markdown(location_markup(first), unsafe_allow_html=True)
-
     if shown.empty:
         st.warning("No matching products. Try another product name or choose All categories.")
     else:
-        for start in range(0, len(shown), 3):
-            chunk = shown.iloc[start:start + 3]
+        # Avoid rendering thousands of cards at once; searches still count all matches.
+        displayed = shown.head(60)
+        if len(shown) > len(displayed):
+            st.caption(f"Showing the first {len(displayed)} matches. Refine your search or category to narrow the results.")
+        for start in range(0, len(displayed), 3):
+            chunk = displayed.iloc[start:start+3]
             cols = st.columns(3)
             for col, (_, row) in zip(cols, chunk.iterrows()):
                 with col:
+                    image_path = str(row.get("image_path", ""))
+                    if image_path and os.path.isfile(image_path):
+                        st.image(image_path, width=120)
                     st.markdown(f"""
                     <div class="product-card">
                       <div style="font-size:25px">{row['icon']}</div>
@@ -276,68 +373,43 @@ if screen == "Find a product":
                       <div class="location-chip">Shelf {escape(row['shelf'])}</div>
                     </div>
                     """, unsafe_allow_html=True)
-
-                    if st.button(
-                        "＋ Add to cart",
-                        key=f"add_{row['id']}",
-                        type="primary",
-                        use_container_width=True,
-                    ):
+                    if st.button("＋ Add to cart", key=f"add_{row['id']}", type="primary", use_container_width=True):
                         add_to_cart(row["id"])
                         st.toast(f"{row['product']} added to cart")
                         rerun()
 
-# ---------- Screen 2: Cart and locations ----------
+# ---------- Screen 2: Cart + locations ----------
 elif screen == "My cart & locations":
-    st.markdown(
-        '<div class="section-title">Your cart & shelf locations</div>'
-        '<div class="muted">Use the highlighted aisle and shelf code to collect each item.</div>',
-        unsafe_allow_html=True,
-    )
+    st.markdown('<div class="section-title">Your cart & shelf locations</div><div class="muted">Use the highlighted aisle and shelf code to collect each item.</div>', unsafe_allow_html=True)
     st.write("")
-
     if not st.session_state.cart:
-        st.info('Your cart is empty. Go to "Find a product" and add items.')
+        st.info("Your cart is empty. Go to “Find a product” and add items.")
         if st.button("Browse products", type="primary"):
             st.session_state.screen = "Find a product"
             rerun()
     else:
         lookup = products_df.set_index("id")
-        st.markdown(
-            f'<div class="step-pill">{cart_count()} ITEMS TO COLLECT</div>',
-            unsafe_allow_html=True,
-        )
+        st.markdown(f'<div class="step-pill">{cart_count()} ITEMS TO COLLECT</div>', unsafe_allow_html=True)
         st.write("")
-
         for pid in list(st.session_state.cart.keys()):
             if pid not in lookup.index:
                 continue
-
             row = lookup.loc[pid]
             qty = st.session_state.cart[pid]
             left, right = st.columns([3, 1])
-
             with left:
                 st.markdown(f"""
                 <div class="product-card" style="min-height:0">
                   <div class="product-name">{row['icon']} {escape(str(row['product']))}</div>
                   <span class="category-tag">{escape(str(row['category']))}</span>
-                  <div style="margin-top:8px;color:#60796f;font-size:13px">
-                    Quantity: <b>{qty}</b> &nbsp; · &nbsp;
-                    Unit price: <b>{money(row['price'])}</b>
-                  </div>
-                  <div class="location-chip">📍 AISLE {int(row['aisle'])}</div>
-                  <div class="location-chip">SHELF {escape(str(row['shelf']))}</div>
+                  <div style="margin-top:8px;color:#60796f;font-size:13px">Quantity: <b>{qty}</b> &nbsp; · &nbsp; Unit price: <b>{money(row['price'])}</b></div>
+                  <div class="location-chip">📍 AISLE {int(row['aisle'])}</div><div class="location-chip">SHELF {escape(str(row['shelf']))}</div>
                 </div>
                 """, unsafe_allow_html=True)
-
             with right:
                 st.write("")
                 st.write("")
-                st.markdown(
-                    f"<div class='price'>{money(float(row['price']) * qty)}</div>",
-                    unsafe_allow_html=True,
-                )
+                st.markdown(f"<div class='price'>{money(float(row['price']) * qty)}</div>", unsafe_allow_html=True)
                 c1, c2 = st.columns(2)
                 with c1:
                     if st.button("＋", key=f"plus_{pid}", use_container_width=True):
@@ -350,74 +422,48 @@ elif screen == "My cart & locations":
                         else:
                             st.session_state.cart[pid] -= 1
                         rerun()
-
         st.markdown("---")
         total_col, action_col = st.columns([2, 1])
         with total_col:
-            st.markdown(
-                f'<div class="metric-box"><div class="metric-label">CART TOTAL</div>'
-                f'<div class="metric-value">{money(cart_total())}</div></div>',
-                unsafe_allow_html=True,
-            )
+            st.markdown(f'<div class="metric-box"><div class="metric-label">CART TOTAL</div><div class="metric-value">{money(cart_total())}</div></div>', unsafe_allow_html=True)
         with action_col:
             st.write("")
-            if st.button(
-                "Continue to final bill →",
-                type="primary",
-                use_container_width=True,
-            ):
+            if st.button("Continue to final bill →", type="primary", use_container_width=True):
                 st.session_state.screen = "Final bill"
                 rerun()
 
-# ---------- Screen 3: Final bill and checkout ----------
+# ---------- Screen 3: Bill ----------
 else:
-    st.markdown(
-        '<div class="section-title">Final bill</div>'
-        '<div class="muted">Review your items before checkout.</div>',
-        unsafe_allow_html=True,
-    )
+    st.markdown('<div class="section-title">Final bill</div><div class="muted">Review your items before checkout.</div>', unsafe_allow_html=True)
     st.write("")
-
     if not st.session_state.cart and not st.session_state.receipt:
         st.info("There are no items to bill yet. Add products to your cart first.")
         if st.button("Find products", type="primary"):
             st.session_state.screen = "Find a product"
             rerun()
-
     elif st.session_state.receipt:
         receipt = st.session_state.receipt
-        st.balloons()
+        blast_effect()
         st.markdown(f"""
         <div class="brand" style="text-align:center">
           <div style="font-size:42px">🎉</div>
           <div class="eyebrow">CHECKOUT COMPLETE</div>
           <h1>Thank you for shopping!</h1>
           <p>Receipt {receipt['number']} · {receipt['time']}</p>
-          <div style="font-size:30px;font-weight:900;color:#197a58;margin-top:12px">
-            {money(receipt['total'])}
-          </div>
+          <div style="font-size:30px;font-weight:900;color:#197a58;margin-top:12px">{money(receipt['total'])}</div>
         </div>
         """, unsafe_allow_html=True)
-
         receipt_df = pd.DataFrame(receipt["items"])
         st.dataframe(receipt_df, use_container_width=True, hide_index=True)
-        st.download_button(
-            "⬇ Download receipt (.csv)",
-            receipt_df.to_csv(index=False).encode("utf-8"),
-            file_name=f"shelfsense_receipt_{receipt['number']}.csv",
-            mime="text/csv",
-        )
-
+        st.download_button("⬇ Download receipt (.csv)", receipt_df.to_csv(index=False).encode("utf-8"), file_name=f"shelfsense_receipt_{receipt['number']}.csv", mime="text/csv")
         if st.button("Start a new shopping session", type="primary"):
             st.session_state.cart = {}
             st.session_state.receipt = None
             st.session_state.screen = "Find a product"
             rerun()
-
     else:
         lookup = products_df.set_index("id")
         bill_rows = []
-
         for pid, qty in st.session_state.cart.items():
             if pid not in lookup.index:
                 continue
@@ -431,48 +477,25 @@ else:
                 "Aisle": int(row["aisle"]),
                 "Shelf": row["shelf"],
             })
-
         bill_df = pd.DataFrame(bill_rows)
-
         if not bill_df.empty:
             st.markdown('<div class="bill-box">', unsafe_allow_html=True)
-            st.dataframe(
-                bill_df[["Product", "Qty", "Unit price", "Amount"]],
-                use_container_width=True,
-                hide_index=True,
-            )
-
+            st.dataframe(bill_df[["Product", "Qty", "Unit price", "Amount"]], use_container_width=True, hide_index=True)
             subtotal = float(bill_df["Amount"].sum())
             st.markdown("---")
             a, b = st.columns(2)
-
             with a:
-                st.markdown(
-                    '<div class="metric-box"><div class="metric-label">ITEMS</div>'
-                    f'<div class="metric-value">{cart_count()}</div></div>',
-                    unsafe_allow_html=True,
-                )
+                st.markdown('<div class="metric-box"><div class="metric-label">ITEMS</div><div class="metric-value">' + str(cart_count()) + '</div></div>', unsafe_allow_html=True)
             with b:
-                st.markdown(
-                    '<div class="metric-box"><div class="metric-label">AMOUNT DUE</div>'
-                    f'<div class="metric-value">{money(subtotal)}</div></div>',
-                    unsafe_allow_html=True,
-                )
-
+                st.markdown(f'<div class="metric-box"><div class="metric-label">AMOUNT DUE</div><div class="metric-value">{money(subtotal)}</div></div>', unsafe_allow_html=True)
             st.caption("Demo bill: taxes and payment processing are not included.")
-
-            if st.button(
-                "✓ Confirm checkout & generate bill",
-                type="primary",
-                use_container_width=True,
-            ):
+            if st.button("✓ Confirm checkout & generate bill", type="primary", use_container_width=True):
                 st.session_state.receipt = {
                     "number": datetime.now().strftime("%Y%m%d%H%M%S"),
                     "time": datetime.now().strftime("%d %b %Y, %I:%M %p"),
                     "total": subtotal,
                     "items": bill_rows,
                 }
-                st.balloons()
+                blast_effect()
                 rerun()
-
-            st.markdown("</div>", unsafe_allow_html=True)
+            st.markdown('</div>', unsafe_allow_html=True)
