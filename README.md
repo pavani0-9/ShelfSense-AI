@@ -1,6 +1,6 @@
 # 🛒 ShelfSense AI — Smart Bazaar Finder
 
-# 🌐 Live Demo : https://shelfsense-ai-09.streamlit.app/
+## 🌐 Live Demo : https://shelfsense-ai-09.streamlit.app/
 **An AI-powered smart product catalogue for discovering products, exploring categories, and finding products more easily.**
 
 ## 📌 About the Project
