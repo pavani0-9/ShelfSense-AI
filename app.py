@@ -149,6 +149,11 @@ _remove_title_patterns = [
     "viva la juicy la fleur",
     "sex in the city sexual instinct",
     "deluxe ball gag with dong",
+    "212 Men by Carolina Herrera Eau De Toilette Spray 1.7 OZ",
+    "it's you babe prenatal cradle, petite (125-145 pounds)",
+    "nuits intimes",
+    "accentus: transcriptions",
+    "children's bike shorts for cycling comfort.",
 ]
 _normalized_titles = products_df["product"].fillna("").astype(str).str.casefold()
 _remove_mask = _normalized_titles.apply(
