@@ -77,16 +77,15 @@ for aisle_no, (category, products) in enumerate(CATALOGUE.items(), start=1):
         })
 products_df = pd.DataFrame(rows)
 products_df["description"] = ""
-products_df["image_path"] = ""
 
 # ---------- Optional retail image dataset ----------
 # Keep the original 200 demo products and add products from train.csv.
 # Update DATASET_DIR if your dataset folder is stored somewhere else.
-DATASET_DIR = r"E:\ShelfSense_AI\Product_Images\retail-products-classification"
-
+DATASET_DIR = os.path.join(os.path.dirname(os.path.abspath(__file__)), "data")
+DATASET_CSV = os.path.join(DATASET_DIR, "retail_products.csv")
 @st.cache_data(show_spinner="Loading retail product dataset...")
 def load_dataset_products(dataset_dir):
-    csv_path = os.path.join(dataset_dir, "train.csv")
+    csv_path = DATASET_CSV    
     if not os.path.isfile(csv_path):
         return pd.DataFrame(columns=[
             "id", "product", "category", "price", "aisle", "shelf",
@@ -126,17 +125,27 @@ def load_dataset_products(dataset_dir):
         f"{'A' if i % 10 < 5 else 'B'}{i % 5 + 1}"
         for i in range(len(df))
     ]
+    
     df["icon"] = "🛍️"
+
+    IMAGE_DIR = os.path.join(
+        os.path.dirname(os.path.abspath(__file__)),
+        "product_images",
+        "train",
+    )
+
     df["image_path"] = df["ImgId"].map(
         lambda image_id: os.path.join(
-            dataset_dir, "train", "train", f"{image_id}.jpg"
+            IMAGE_DIR, f"{image_id}.jpg"
         )
     )
-    return df[[
-        "id", "product", "category", "price", "aisle", "shelf",
-        "icon", "description", "image_path"
-    ]]
 
+    return df[
+        [
+            "id", "product", "category", "price", "aisle", "shelf",
+            "icon", "description", "image_path"
+        ]
+    ]
 
 dataset_products = load_dataset_products(DATASET_DIR)
 products_df = pd.concat([products_df, dataset_products], ignore_index=True)
@@ -154,11 +163,16 @@ _remove_title_patterns = [
     "nuits intimes",
     "accentus: transcriptions",
     "children's bike shorts for cycling comfort.",
+    "lilypadz reuseable nursing pads",
 ]
 _normalized_titles = products_df["product"].fillna("").astype(str).str.casefold()
+_normalized_patterns = [pattern.casefold() for pattern in _remove_title_patterns]
 _remove_mask = _normalized_titles.apply(
-    lambda title: any(pattern in title for pattern in _remove_title_patterns)
+    lambda title: any(
+        pattern in title for pattern in _normalized_patterns
+    )
 )
+products_df = products_df.loc[~_remove_mask].copy().reset_index(drop=True)
 products_df = products_df.loc[~_remove_mask].copy().reset_index(drop=True)
 
 # Keep the requested original catalogue size explicit and verifiable.
